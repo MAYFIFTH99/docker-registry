@@ -26,14 +26,6 @@ public class ImageService {
     }
 
     /**
-     * PUSH
-     */
-
-    /**
-     * PULL
-     */
-
-    /**
      * 모든 이미지 목록 조회
      * // TODO : 필터링 추가
      */
@@ -45,6 +37,14 @@ public class ImageService {
                 .onErrorResume(WebClientResponseException.class,
                         ex -> Mono.just("Error fetching images: " + ex.getMessage()));
     }
+
+    /**
+     * PUSH
+     */
+
+    /**
+     * PULL
+     */
 
     /**
      * 이미지 삭제
