@@ -1,4 +1,4 @@
-package opensource.dockerregistry.backend.client;
+package opensource.dockerregistry.backend.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -9,12 +9,12 @@ import reactor.core.publisher.Mono;
 
 @Component
 @RequiredArgsConstructor
-public class DockerRegistryClient {
+public class ImageService {
 
     private final WebClient registryWebClient;
 
     /**
-     * Registry API v2 지원 여부 확인
+     * Registry API v2 health check
      */
     public Mono<Boolean> ping() {
         return registryWebClient.get()
@@ -26,24 +26,43 @@ public class DockerRegistryClient {
     }
 
     /**
-     * 특정 이미지의 manifest 조회
+     * 모든 이미지 목록 조회
+     * // TODO : 필터링 추가
      */
-    public Mono<String> getImageManifest(String imageName, String tag) {
+    public Mono<Object> fetchAllImages() {
         return registryWebClient.get()
-                .uri("/v2/{image}/manifests/{tag}", imageName, tag)
-                .header("Accept", "application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json")
+                .uri("/v2/_catalog")
                 .retrieve()
-                .bodyToMono(String.class);
+                .bodyToMono(Object.class)
+                .onErrorResume(WebClientResponseException.class,
+                        ex -> Mono.just("Error fetching images: " + ex.getMessage()));
     }
-
 
     /**
-     * 특정 blob 다운로드
+     * PUSH
      */
-    public Mono<byte[]> downloadBlob(String imageName, String digest) {
-        return registryWebClient.get()
-                .uri("/v2/{image}/blobs/{digest}", imageName, digest)
-                .retrieve()
-                .bodyToMono(byte[].class);
-    }
+
+    /**
+     * PULL
+     */
+
+    /**
+     * 이미지 삭제
+     */
+
+    /**
+     * 특정 이미지 태그 조회
+     */
+
+    /**
+     * 특정 이미지 태그 삭제
+     */
+
+    /**
+     * 사용자별 활동 기록 조회
+     */
+
+    /**
+     * 이미지별 활동 기록 조회
+     */
 }
