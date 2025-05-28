@@ -1,7 +1,6 @@
 package opensource.dockerregistry.backend.controller;
 
 import lombok.RequiredArgsConstructor;
-import opensource.dockerregistry.backend.dto.UserDto;
 import opensource.dockerregistry.backend.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,8 +20,8 @@ public class UserController {
     }
 
     @PostMapping
-    public ResponseEntity<String> addUser(@RequestBody UserDto userDto) throws IOException {
-        userService.createUser(userDto.getUsername(), userDto.getPassword());
+    public ResponseEntity<String> addUser(@RequestParam String username, @RequestParam String passwd) throws IOException {
+        userService.createUser(username, passwd);
         return ResponseEntity.ok("User added");
     }
 
