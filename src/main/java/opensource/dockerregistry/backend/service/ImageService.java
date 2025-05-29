@@ -1,5 +1,8 @@
 package opensource.dockerregistry.backend.service;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import opensource.dockerregistry.backend.dto.TagListResponse;
@@ -23,14 +26,28 @@ public class ImageService {
                 .exchangeToMono(response -> Mono.just(ResponseEntity.status(response.statusCode()).build()));
     }
 
-    public Mono<Object> fetchAllImages() {
+    public Mono<List<String>> fetchAllImages(Optional<String> filterOpt) {
         return registryWebClient.get()
                 .uri("/v2/_catalog")
                 .retrieve()
-                .bodyToMono(Object.class)
-                .onErrorResume(WebClientResponseException.class,
-                        ex -> Mono.just("Error fetching images: " + ex.getMessage()));
+                .bodyToMono(Map.class)
+                .map(data -> {
+                    List<String> repositories = (List<String>) data.getOrDefault("repositories", List.of());
+
+                    if (filterOpt.isPresent()) {
+                        String filter = filterOpt.get().toLowerCase();
+                        return repositories.stream()
+                                .filter(name -> name.toLowerCase().contains(filter))
+                                .toList();
+                    }
+
+                    return repositories;
+                })
+                .onErrorResume(WebClientResponseException.class, ex -> {
+                    return Mono.just(List.of());  // 실패 시 빈 리스트 반환
+                });
     }
+
 
     public Mono<ResponseEntity<String>> getManifest(String name, String reference) {
         return registryWebClient.get()
