@@ -34,9 +34,11 @@ dependencies {
     //test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.springframework.security:spring-security-test'
 
     //security
-//    implementation 'org.mindrot:jbcrypt:0.4'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.mindrot:jbcrypt:0.4'
 
     //database
     runtimeOnly 'com.mysql:mysql-connector-j'
