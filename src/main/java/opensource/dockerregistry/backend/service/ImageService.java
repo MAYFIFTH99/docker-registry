@@ -3,129 +3,110 @@ package opensource.dockerregistry.backend.service;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import opensource.dockerregistry.backend.dto.TagListResponse;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+import org.springframework.web.client.RestTemplate;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ImageService {
 
-    private final WebClient registryWebClient;
+    public static final String REGISTRY_URL = "http://localhost:5000/v2/";
+    public static final String APPLICATION_VND_OCI_IMAGE_MANIFEST_V_1_JSON = "application/vnd.oci.image.manifest.v1+json";
+    public static final String APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_2_JSON = "application/vnd.docker.distribution.manifest.v2+json";
+    public static final String APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_1_JSON = "application/vnd.docker.distribution.manifest.v1+json";
+    public static final String DOCKER_CONTENT_DIGEST = "Docker-Content-Digest";
+    private final RestTemplate registryRestTemplate;
 
-    public Mono<ResponseEntity<Void>> checkV2Support() {
-        return registryWebClient.get()
-                .uri("/v2/")
-                .exchangeToMono(response -> Mono.just(ResponseEntity.status(response.statusCode()).build()));
-    }
-
-    public Mono<List<String>> fetchAllImages(Optional<String> filterOpt) {
-        return registryWebClient.get()
-                .uri("/v2/_catalog")
-                .retrieve()
-                .bodyToMono(Map.class)
-                .map(data -> {
-                    List<String> repositories = (List<String>) data.getOrDefault("repositories", List.of());
-
-                    if (filterOpt.isPresent()) {
-                        String filter = filterOpt.get().toLowerCase();
-                        return repositories.stream()
-                                .filter(name -> name.toLowerCase().contains(filter))
-                                .toList();
-                    }
-
-                    return repositories;
-                })
-                .onErrorResume(WebClientResponseException.class, ex -> {
-                    return Mono.just(List.of());  // 실패 시 빈 리스트 반환
-                });
+    public List<String> fetchAllImages(Optional<String> filterOpt) {
+        try {
+            var response = registryRestTemplate.getForObject(REGISTRY_URL + "_catalog", Map.class);
+            var repositories = (List<String>) response.getOrDefault("repositories", List.of());
+            return filterOpt.map(filter -> repositories.stream()
+                    .filter(name -> name.toLowerCase().contains(filter.toLowerCase()))
+                    .collect(Collectors.toList())).orElse(repositories);
+        } catch (Exception e) {
+            return List.of();
+        }
     }
 
 
-    public Mono<ResponseEntity<String>> getManifest(String name, String reference) {
-        return registryWebClient.get()
-                .uri("/v2/" + name + "/manifests/" + reference)
-                .header("Accept", "application/vnd.docker.distribution.manifest.v2+json")
-                .retrieve()
-                .toEntity(String.class)
-                .onErrorResume(e -> {
-                    return Mono.just(ResponseEntity.internalServerError().body("Error: " + e.getMessage()));
-                });
+    public ResponseEntity<String> listTags(String name) {
+        return registryRestTemplate.exchange(REGISTRY_URL + name + "/tags/list",
+                HttpMethod.GET, null, String.class);
     }
 
-    public Mono<ResponseEntity<String>> listTags(String name) {
-        return registryWebClient.get()
-                .uri("/v2/" + name + "/tags/list")
-                .retrieve()
-                .toEntity(String.class);
+    public ResponseEntity<Void> deleteTag(String name, String tag) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Accept", String.join(", ",
+                    APPLICATION_VND_OCI_IMAGE_MANIFEST_V_1_JSON,
+                    APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_2_JSON,
+                    APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_1_JSON
+            ));
+
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<Void> headResp = registryRestTemplate.exchange(REGISTRY_URL + name + "/manifests/" + tag,
+                    HttpMethod.HEAD, entity, Void.class);
+
+            String digest = headResp.getHeaders().getFirst(DOCKER_CONTENT_DIGEST);
+
+            if (digest == null) return ResponseEntity.notFound().build();
+            return registryRestTemplate.exchange(REGISTRY_URL + name + "/manifests/" + digest,
+                    HttpMethod.DELETE, null, Void.class);
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().build();
+        }
     }
 
-    public Mono<ResponseEntity<Void>> deleteImage(String name, String reference) {
-        return registryWebClient.head()
-                .uri("/v2/" + name + "/manifests/" + reference)
-                .header("Accept", String.join(", ",
-                        "application/vnd.oci.image.manifest.v1+json",
-                        "application/vnd.docker.distribution.manifest.v2+json",
-                        "application/vnd.docker.distribution.manifest.v1+json"
-                ))
-                .exchangeToMono(headResp -> {
-                    String digest = headResp.headers().asHttpHeaders().getFirst("Docker-Content-Digest");
-                    if (digest == null) {
-                        return Mono.just(ResponseEntity.notFound().build());
-                    }
-                    return registryWebClient.delete()
-                            .uri("/v2/" + name + "/manifests/" + digest)
-                            .exchangeToMono(delResp -> Mono.just(ResponseEntity.status(delResp.statusCode()).build()));
-                });
-    }
+    public ResponseEntity<String> deleteAllTagsForImage(String name) {
+        try {
+            TagListResponse tagList = registryRestTemplate.getForObject(REGISTRY_URL + name + "/tags/list", TagListResponse.class);
+            if (tagList == null || tagList.getTags() == null || tagList.getTags().isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
 
-    public Mono<ResponseEntity<String>> deleteAllTagsForImage(String name) {
-        return registryWebClient.get()
-                .uri("/v2/" + name + "/tags/list")
-                .retrieve()
-                .bodyToMono(TagListResponse.class)
-                .flatMapMany(tagList -> {
-                    if (tagList.getTags() == null || tagList.getTags().isEmpty()) {
-                        return Flux.empty();
-                    }
+            List<String> deletedTags = tagList.getTags().stream().map(tag -> {
+                try {
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.set("Accept", String.join(", ",
+                            APPLICATION_VND_OCI_IMAGE_MANIFEST_V_1_JSON,
+                            APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_2_JSON,
+                            APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_1_JSON
+                    ));
 
-                    return Flux.fromIterable(tagList.getTags());
-                })
-                .flatMap(tag -> {
-                    return registryWebClient.head()
-                            .uri("/v2/" + name + "/manifests/" + tag)
-                            .header("Accept", String.join(", ",
-                                    "application/vnd.oci.image.manifest.v1+json",
-                                    "application/vnd.docker.distribution.manifest.v2+json",
-                                    "application/vnd.docker.distribution.manifest.v1+json"
-                            ))
-                            .exchangeToMono(headResp -> {
-                                String digest = headResp.headers().asHttpHeaders().getFirst("Docker-Content-Digest");
-                                if (digest == null) {
-                                    return Mono.empty();  // digest 없으면 skip
-                                }
+                    HttpEntity<Void> entity = new HttpEntity<>(headers);
+                    ResponseEntity<Void> headResp = registryRestTemplate.exchange(REGISTRY_URL + name + "/manifests/" + tag,
+                            HttpMethod.HEAD, entity, Void.class);
+                    String digest = headResp.getHeaders().getFirst(DOCKER_CONTENT_DIGEST);
+                    if (digest == null) return null;
 
-                                return registryWebClient.delete()
-                                        .uri("/v2/" + name + "/manifests/" + digest)
-                                        .exchangeToMono(delResp -> {
-                                            log.info("Deleted tag '{}' (digest={}) → status: {}", tag, digest, delResp.statusCode());
-                                            return Mono.just(tag);
-                                        });
-                            });
-                })
-                .collectList()
-                .map(deletedTags -> {
-                    if (deletedTags.isEmpty()) {
-                        return ResponseEntity.notFound().build();
-                    }
-                    return ResponseEntity.ok("Deleted tags: " + String.join(", ", deletedTags));
-                });
+                    registryRestTemplate.exchange(REGISTRY_URL + name + "/manifests/" + digest,
+                            HttpMethod.DELETE, null, Void.class);
+                    log.info("Deleted tag '{}' (digest={})", tag, digest);
+                    return tag;
+
+                } catch (Exception e) {
+                    return null;
+                }
+
+            }).filter(tag -> tag != null).collect(Collectors.toList());
+
+            if (deletedTags.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.ok("Deleted tags: " + String.join(", ", deletedTags));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("Error deleting tags: " + e.getMessage());
+        }
     }
 }
