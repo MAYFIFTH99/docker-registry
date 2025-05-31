@@ -12,7 +12,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 @Service
@@ -20,21 +19,17 @@ import org.springframework.web.client.RestTemplate;
 @Slf4j
 public class ImageService {
 
+    public static final String REGISTRY_URL = "http://localhost:5000/v2/";
+    public static final String APPLICATION_VND_OCI_IMAGE_MANIFEST_V_1_JSON = "application/vnd.oci.image.manifest.v1+json";
+    public static final String APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_2_JSON = "application/vnd.docker.distribution.manifest.v2+json";
+    public static final String APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_1_JSON = "application/vnd.docker.distribution.manifest.v1+json";
+    public static final String DOCKER_CONTENT_DIGEST = "Docker-Content-Digest";
     private final RestTemplate registryRestTemplate;
-
-    public ResponseEntity<Void> checkV2Support() {
-        try {
-            ResponseEntity<String> response = registryRestTemplate.exchange("http://localhost:5000/v2/", HttpMethod.GET, null, String.class);
-            return ResponseEntity.status(response.getStatusCode()).build();
-        } catch (HttpStatusCodeException e) {
-            return ResponseEntity.status(e.getStatusCode()).build();
-        }
-    }
 
     public List<String> fetchAllImages(Optional<String> filterOpt) {
         try {
-            Map response = registryRestTemplate.getForObject("http://localhost:5000/v2/_catalog", Map.class);
-            List<String> repositories = (List<String>) response.getOrDefault("repositories", List.of());
+            var response = registryRestTemplate.getForObject(REGISTRY_URL + "_catalog", Map.class);
+            var repositories = (List<String>) response.getOrDefault("repositories", List.of());
             return filterOpt.map(filter -> repositories.stream()
                     .filter(name -> name.toLowerCase().contains(filter.toLowerCase()))
                     .collect(Collectors.toList())).orElse(repositories);
@@ -43,38 +38,31 @@ public class ImageService {
         }
     }
 
-    public ResponseEntity<String> getManifest(String name, String reference) {
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Accept", "application/vnd.docker.distribution.manifest.v2+json");
-            HttpEntity<Void> entity = new HttpEntity<>(headers);
-            return registryRestTemplate.exchange("http://localhost:5000/v2/" + name + "/manifests/" + reference,
-                    HttpMethod.GET, entity, String.class);
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Error: " + e.getMessage());
-        }
-    }
 
     public ResponseEntity<String> listTags(String name) {
-        return registryRestTemplate.exchange("http://localhost:5000/v2/" + name + "/tags/list",
+        return registryRestTemplate.exchange(REGISTRY_URL + name + "/tags/list",
                 HttpMethod.GET, null, String.class);
     }
 
-    public ResponseEntity<Void> deleteImage(String name, String reference) {
+    public ResponseEntity<Void> deleteTag(String name, String tag) {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.set("Accept", String.join(", ",
-                    "application/vnd.oci.image.manifest.v1+json",
-                    "application/vnd.docker.distribution.manifest.v2+json",
-                    "application/vnd.docker.distribution.manifest.v1+json"
+                    APPLICATION_VND_OCI_IMAGE_MANIFEST_V_1_JSON,
+                    APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_2_JSON,
+                    APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_1_JSON
             ));
+
             HttpEntity<Void> entity = new HttpEntity<>(headers);
-            ResponseEntity<Void> headResp = registryRestTemplate.exchange("http://localhost:5000/v2/" + name + "/manifests/" + reference,
+            ResponseEntity<Void> headResp = registryRestTemplate.exchange(REGISTRY_URL + name + "/manifests/" + tag,
                     HttpMethod.HEAD, entity, Void.class);
-            String digest = headResp.getHeaders().getFirst("Docker-Content-Digest");
+
+            String digest = headResp.getHeaders().getFirst(DOCKER_CONTENT_DIGEST);
+
             if (digest == null) return ResponseEntity.notFound().build();
-            return registryRestTemplate.exchange("http://localhost:5000/v2/" + name + "/manifests/" + digest,
+            return registryRestTemplate.exchange(REGISTRY_URL + name + "/manifests/" + digest,
                     HttpMethod.DELETE, null, Void.class);
+
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();
         }
@@ -82,7 +70,7 @@ public class ImageService {
 
     public ResponseEntity<String> deleteAllTagsForImage(String name) {
         try {
-            TagListResponse tagList = registryRestTemplate.getForObject("http://localhost:5000/v2/" + name + "/tags/list", TagListResponse.class);
+            TagListResponse tagList = registryRestTemplate.getForObject(REGISTRY_URL + name + "/tags/list", TagListResponse.class);
             if (tagList == null || tagList.getTags() == null || tagList.getTags().isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
@@ -91,23 +79,26 @@ public class ImageService {
                 try {
                     HttpHeaders headers = new HttpHeaders();
                     headers.set("Accept", String.join(", ",
-                            "application/vnd.oci.image.manifest.v1+json",
-                            "application/vnd.docker.distribution.manifest.v2+json",
-                            "application/vnd.docker.distribution.manifest.v1+json"
+                            APPLICATION_VND_OCI_IMAGE_MANIFEST_V_1_JSON,
+                            APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_2_JSON,
+                            APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_1_JSON
                     ));
+
                     HttpEntity<Void> entity = new HttpEntity<>(headers);
-                    ResponseEntity<Void> headResp = registryRestTemplate.exchange("http://localhost:5000/v2/" + name + "/manifests/" + tag,
+                    ResponseEntity<Void> headResp = registryRestTemplate.exchange(REGISTRY_URL + name + "/manifests/" + tag,
                             HttpMethod.HEAD, entity, Void.class);
-                    String digest = headResp.getHeaders().getFirst("Docker-Content-Digest");
+                    String digest = headResp.getHeaders().getFirst(DOCKER_CONTENT_DIGEST);
                     if (digest == null) return null;
 
-                    registryRestTemplate.exchange("http://localhost:5000/v2/" + name + "/manifests/" + digest,
+                    registryRestTemplate.exchange(REGISTRY_URL + name + "/manifests/" + digest,
                             HttpMethod.DELETE, null, Void.class);
                     log.info("Deleted tag '{}' (digest={})", tag, digest);
                     return tag;
+
                 } catch (Exception e) {
                     return null;
                 }
+
             }).filter(tag -> tag != null).collect(Collectors.toList());
 
             if (deletedTags.isEmpty()) {

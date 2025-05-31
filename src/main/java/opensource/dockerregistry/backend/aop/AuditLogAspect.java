@@ -20,7 +20,7 @@ public class AuditLogAspect {
 
     private final AuditLogService auditLogService;
 
-    @Pointcut("execution(* opensource.dockerregistry.backend.service.ImageService.deleteImage(..)) && args(name, reference)")
+    @Pointcut("execution(* opensource.dockerregistry.backend.service.ImageService.deleteTag(..)) && args(name, reference)")
     public void deleteImage(String name, String reference) {}
 
     @Pointcut("execution(* opensource.dockerregistry.backend.service.ImageService.deleteAllTagsForImage(..)) && args(name)")

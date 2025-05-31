@@ -19,35 +19,25 @@ public class ImageController {
 
     private final ImageService imageService;
 
-    @GetMapping("/")
-    public ResponseEntity<Void> checkV2() {
-        return imageService.checkV2Support();
-    }
-
-    @GetMapping("/all")
+    @GetMapping
     public ResponseEntity<Object> getAllImages(@RequestParam(name = "filter", required = false) String filter) {
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(imageService.fetchAllImages(Optional.ofNullable(filter)));
     }
 
-    @GetMapping("/{name}/manifests/{reference}")
-    public ResponseEntity<String> getManifest(@PathVariable String name, @PathVariable String reference) {
-        return imageService.getManifest(name, reference);
-    }
-
-    @GetMapping("/{name}/tags/list")
+    @GetMapping("/{name}/tags")
     public ResponseEntity<String> listTags(@PathVariable String name) {
         return imageService.listTags(name);
     }
 
     @DeleteMapping("/{name}")
-    public ResponseEntity<String> deleteImageAndAllReferences(@PathVariable String name) {
+    public ResponseEntity<String> deleteImageAndAllTags(@PathVariable String name) {
         return imageService.deleteAllTagsForImage(name);
     }
 
-    @DeleteMapping("/{name}/manifests/{reference}")
-    public ResponseEntity<Void> deleteImage(@PathVariable String name, @PathVariable String reference) {
-        return imageService.deleteImage(name, reference);
+    @DeleteMapping("/{name}/tags/{tag}")
+    public ResponseEntity<Void> deleteSpecificTag(@PathVariable String name, @PathVariable String tag) {
+        return imageService.deleteTag(name, tag);
     }
 }
