@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import opensource.dockerregistry.backend.dto.TagListResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -19,7 +20,9 @@ import org.springframework.web.client.RestTemplate;
 @Slf4j
 public class ImageService {
 
-    public static final String REGISTRY_URL = "http://localhost:5000/v2/";
+    @Value("${docker.registry.url}")
+    public String REGISTRY_URL;
+
     public static final String APPLICATION_VND_OCI_IMAGE_MANIFEST_V_1_JSON = "application/vnd.oci.image.manifest.v1+json";
     public static final String APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_2_JSON = "application/vnd.docker.distribution.manifest.v2+json";
     public static final String APPLICATION_VND_DOCKER_DISTRIBUTION_MANIFEST_V_1_JSON = "application/vnd.docker.distribution.manifest.v1+json";
