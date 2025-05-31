@@ -38,7 +38,6 @@ dependencies {
 
     //security
     implementation 'org.springframework.boot:spring-boot-starter-security'
-    implementation 'org.mindrot:jbcrypt:0.4'
 
     //database
     runtimeOnly 'com.mysql:mysql-connector-j'
