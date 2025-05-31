@@ -20,7 +20,8 @@ public class AuditLogService {
                 .action(action)
                 .target(target)
                 .build();
-        System.out.println("🔥 저장 요청: " + log);  // ← 로그 찍어보기
+
+        System.out.println("저장 요청: " + log);
 
         repository.save(log);
     }

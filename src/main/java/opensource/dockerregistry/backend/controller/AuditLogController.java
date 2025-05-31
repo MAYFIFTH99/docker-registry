@@ -16,13 +16,13 @@ public class AuditLogController {
 
     private final AuditLogService auditLogService;
 
-    @GetMapping
-    public List<AuditLogEntity> getAudit(
-            @RequestParam(required = false) String user,
-            @RequestParam(required = false) String image
-    ) {
-        if (user != null) return auditLogService.getByUser(user);
-        if (image != null) return auditLogService.getByImage(image);
-        return List.of(); // 빈 리스트 반환
+    @GetMapping("/user")
+    public List<AuditLogEntity> getByUser(@RequestParam String username) {
+        return auditLogService.getByUser(username);
+    }
+
+    @GetMapping("/image")
+    public List<AuditLogEntity> getByImage(@RequestParam String image) {
+        return auditLogService.getByImage(image);
     }
 }

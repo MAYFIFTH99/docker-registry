@@ -1,17 +1,18 @@
 package opensource.dockerregistry.backend.aop;
 
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import opensource.dockerregistry.backend.service.AuditLogService;
+import opensource.dockerregistry.backend.util.UserUtils;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
-import java.util.Optional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Aspect
 @Component
@@ -19,6 +20,8 @@ import java.util.Optional;
 public class AuditLogAspect {
 
     private final AuditLogService auditLogService;
+
+
 
     @Pointcut("execution(* opensource.dockerregistry.backend.service.ImageService.deleteTag(..)) && args(name, reference)")
     public void deleteImage(String name, String reference) {}
@@ -65,7 +68,12 @@ public class AuditLogAspect {
     }
 
     private String getCurrentUsername() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        return (authentication != null && authentication.isAuthenticated()) ? authentication.getName() : "";
+        ServletRequestAttributes attr = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attr == null) return "";
+        HttpServletRequest request = attr.getRequest();
+        String s = UserUtils.extractUsername(request);
+        System.out.println("현재 사용자: " + s);
+        return s;
     }
+
 }
