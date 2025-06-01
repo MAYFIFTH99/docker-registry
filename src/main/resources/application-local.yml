@@ -1,9 +1,9 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:registry;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
+    url: jdbc:mysql://localhost:3306/registry?useSSL=false&allowPublicKeyRetrieval=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: 1234
   jpa:
     hibernate:
       ddl-auto: create
@@ -23,7 +23,7 @@ spring:
 
 docker:
   registry:
-    url: http://registry:5000/v2
+    url: http://localhost:5000/v2
 logging.level:
   org.hibernate.SQL: debug # 이거 끄면 format_sql 적용 안됨
 #  org.hibernate.type: trace
