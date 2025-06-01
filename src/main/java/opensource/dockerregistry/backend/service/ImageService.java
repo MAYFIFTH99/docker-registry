@@ -4,8 +4,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import opensource.dockerregistry.backend.dto.DeleteTagsResponse;
 import opensource.dockerregistry.backend.dto.TagListResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -41,7 +43,6 @@ public class ImageService {
         }
     }
 
-
     public ResponseEntity<String> listTags(String name) {
         return registryRestTemplate.exchange(REGISTRY_URL + name + "/tags/list",
                 HttpMethod.GET, null, String.class);
@@ -71,7 +72,7 @@ public class ImageService {
         }
     }
 
-    public ResponseEntity<String> deleteAllTagsForImage(String name) {
+    public ResponseEntity<DeleteTagsResponse> deleteAllTagsForImage(String name) {
         try {
             TagListResponse tagList = registryRestTemplate.getForObject(REGISTRY_URL + name + "/tags/list", TagListResponse.class);
             if (tagList == null || tagList.getTags() == null || tagList.getTags().isEmpty()) {
@@ -107,9 +108,15 @@ public class ImageService {
             if (deletedTags.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
-            return ResponseEntity.ok("Deleted tags: " + String.join(", ", deletedTags));
+
+            DeleteTagsResponse response = new DeleteTagsResponse();
+            response.setImage(name);
+            response.setDeletedTags(deletedTags);
+            response.setCount(deletedTags.size());
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Error deleting tags: " + e.getMessage());
+            return ResponseEntity.internalServerError().build();
         }
     }
 }
