@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
+import opensource.dockerregistry.backend.dto.AuditLogRequestDto;
 import opensource.dockerregistry.backend.service.AuditLogService;
 import opensource.dockerregistry.backend.util.UserUtils;
 import org.aspectj.lang.annotation.AfterReturning;
@@ -20,8 +21,6 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 public class AuditLogAspect {
 
     private final AuditLogService auditLogService;
-
-
 
     @Pointcut("execution(* opensource.dockerregistry.backend.service.ImageService.deleteTag(..)) && args(name, reference)")
     public void deleteImage(String name, String reference) {}
@@ -40,7 +39,7 @@ public class AuditLogAspect {
         if (response.getStatusCode().is2xxSuccessful()) {
             String target = name + ":" + reference;
             String username = getCurrentUsername();
-            auditLogService.log(username, "DELETE_IMAGE_TAG", target);
+            auditLogService.log(new AuditLogRequestDto(username, "DELETE_IMAGE_TAG", target));
         }
     }
 
@@ -48,7 +47,7 @@ public class AuditLogAspect {
     public void afterDeleteAllTags(String name, ResponseEntity<String> response) {
         if (response.getStatusCode().is2xxSuccessful()) {
             String username = getCurrentUsername();
-            auditLogService.log(username, "DELETE_IMAGE_ALL_TAGS", name);
+            auditLogService.log(new AuditLogRequestDto(username, "DELETE_IMAGE_ALL_TAGS", name));
         }
     }
 
@@ -56,7 +55,7 @@ public class AuditLogAspect {
     public void afterViewTags(String name, ResponseEntity<String> response) {
         if (response.getStatusCode().is2xxSuccessful()) {
             String username = getCurrentUsername();
-            auditLogService.log(username, "VIEW_TAGS", name);
+            auditLogService.log(new AuditLogRequestDto(username, "VIEW_TAGS", name));
         }
     }
 
@@ -64,16 +63,14 @@ public class AuditLogAspect {
     public void afterViewAllImages(Optional<String> filterOpt, List<String> images) {
         String target = filterOpt.map(f -> "filter=" + f).orElse("all");
         String username = getCurrentUsername();
-        auditLogService.log(username, "VIEW_ALL_IMAGES", target);
+        auditLogService.log(new AuditLogRequestDto(username, "VIEW_ALL_IMAGES", target));
     }
 
     private String getCurrentUsername() {
         ServletRequestAttributes attr = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (attr == null) return "";
+        if (attr == null) return "anonymous";
         HttpServletRequest request = attr.getRequest();
         String s = UserUtils.extractUsername(request);
-        System.out.println("현재 사용자: " + s);
-        return s;
+        return s != null ? s : "anonymous";
     }
-
 }
