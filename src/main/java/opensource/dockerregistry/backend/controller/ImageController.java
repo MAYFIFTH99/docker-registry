@@ -1,7 +1,9 @@
 package opensource.dockerregistry.backend.controller;
 
 import java.util.Optional;
+
 import lombok.RequiredArgsConstructor;
+import opensource.dockerregistry.backend.dto.DeleteTagsResponse;
 import opensource.dockerregistry.backend.service.ImageService;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -32,7 +34,7 @@ public class ImageController {
     }
 
     @DeleteMapping("/{name}")
-    public ResponseEntity<String> deleteImageAndAllTags(@PathVariable String name) {
+    public ResponseEntity<DeleteTagsResponse> deleteImageAndAllTags(@PathVariable String name) {
         return imageService.deleteAllTagsForImage(name);
     }
 
