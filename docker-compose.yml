@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   registry:
     image: registry:2
@@ -15,19 +13,21 @@ services:
       - ./data/registry:/var/lib/registry
       - ./auth:/auth
     networks:
-      - registry_net
+      - back
 
-  spring:
+  app:
     build:
       context: .
-    container_name: image-service-api
+    container_name: app
     ports:
       - "8080:8080"
     depends_on:
       - registry
+    volumes:
+      - ./auth:/auth
     networks:
-      - registry_net
+      - back
 
 networks:
-  registry_net:
+  back:
     driver: bridge

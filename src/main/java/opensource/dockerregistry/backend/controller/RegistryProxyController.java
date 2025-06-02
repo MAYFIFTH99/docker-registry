@@ -12,11 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import opensource.dockerregistry.backend.dto.AuditLogRequestDto;
 import opensource.dockerregistry.backend.service.AuditLogService;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -57,12 +53,10 @@ public class RegistryProxyController {
             HttpEntity<byte[]> httpEntity = new HttpEntity<>(body, headers);
             ResponseEntity<byte[]> response = restTemplate.exchange(uri, method, httpEntity, byte[].class);
 
-            // 인증 유저 추출
-            String authHeader = headers.getFirst("Authorization");
+            String authHeader = request.getHeader("Authorization");
             String username = extractUsernameFromHeader(authHeader);
             String targetImage = extractImageFromPath(path);
 
-            // PUSH 및 PULL 요청 로그 기록 (정상 응답일 때만 기록)
             if (response.getStatusCode().is2xxSuccessful()) {
                 if (method == HttpMethod.PUT && path.contains("/manifests/")) {
                     auditLogService.log(new AuditLogRequestDto(username, "PUSH", targetImage));
@@ -74,7 +68,25 @@ public class RegistryProxyController {
             HttpHeaders responseHeaders = new HttpHeaders();
             response.getHeaders().forEach((key, value) -> {
                 if (!key.equalsIgnoreCase("Transfer-Encoding")) {
-                    responseHeaders.put(key, value);
+                    if (key.equalsIgnoreCase("Location")) {
+                        String proxyBase = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
+                        List<String> rewritten = value.stream()
+                                .map(loc -> {
+                                    try {
+                                        URI locUri = URI.create(loc);
+                                        String newPath = locUri.getRawPath();
+                                        String newQuery = locUri.getRawQuery();
+                                        return proxyBase + newPath + (newQuery != null ? "?" + newQuery : "");
+                                    } catch (Exception e) {
+                                        log.warn("Location 헤더 파싱 실패", e);
+                                        return loc;
+                                    }
+                                })
+                                .toList();
+                        responseHeaders.put(key, rewritten);
+                    } else {
+                        responseHeaders.put(key, value);
+                    }
                 }
             });
 
@@ -95,7 +107,7 @@ public class RegistryProxyController {
                 String base64Credentials = authHeader.substring("Basic ".length());
                 byte[] decodedBytes = Base64.getDecoder().decode(base64Credentials);
                 String decoded = new String(decodedBytes, StandardCharsets.UTF_8);
-                return decoded.split(":", 2)[0]; // username:password
+                return decoded.split(":", 2)[0];
             } catch (Exception e) {
                 log.warn("Authorization 디코딩 실패", e);
                 return "unknown";
@@ -105,7 +117,6 @@ public class RegistryProxyController {
     }
 
     private String extractImageFromPath(String path) {
-        // e.g., /myapp/manifests/latest → myapp
         String trimmed = path.startsWith("/") ? path.substring(1) : path;
         String[] segments = trimmed.split("/");
         return segments.length >= 2 ? segments[0] : "unknown";

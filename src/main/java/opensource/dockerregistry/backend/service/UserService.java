@@ -19,7 +19,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class UserService {
 
-    private final static Path HTPASSWD_PATH = Paths.get("auth", "htpasswd");
+    private final static Path HTPASSWD_PATH = Paths.get("./auth", "htpasswd");
 
     public void addUser(String username, String password) {
         try {
@@ -71,6 +71,9 @@ public class UserService {
 
             boolean exists = Files.readAllLines(HTPASSWD_PATH).stream()
                     .anyMatch(line -> line.startsWith("test:"));
+
+            System.out.println("✅ HTPASSWD 경로: " + HTPASSWD_PATH.toAbsolutePath());
+
             if (!exists) {
                 String hashed = BCrypt.hashpw("1234", BCrypt.gensalt(10));
                 String entry = "test:" + hashed + "\n";
