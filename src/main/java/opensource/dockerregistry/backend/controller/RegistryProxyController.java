@@ -70,17 +70,27 @@ public class RegistryProxyController {
 
             HttpHeaders responseHeaders = new HttpHeaders();
             response.getHeaders().forEach((key, value) -> {
-                if (!key.equalsIgnoreCase("Transfer-Encoding")) {
-                    if (key.equalsIgnoreCase("Location")) {
-                        String proxyBase = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
-                        List<String> rewritten = value.stream()
-                                .map(loc -> loc.replace(registryUrl + "/", proxyBase + "/"))
-                                .map(loc -> loc.replaceAll("(?<!(http:|https:))/+", "/"))
-                                .toList();
-                        responseHeaders.put(key, rewritten);
-                    } else {
-                        responseHeaders.put(key, value);
-                    }
+                if (key.equalsIgnoreCase("Transfer-Encoding")) {
+                    return; // 생략
+                }
+                if (key.equalsIgnoreCase("Location")) {
+                    String proxyBase = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
+                    List<String> rewritten = value.stream()
+                            .map(loc -> {
+                                try {
+                                    URI locUri = URI.create(loc);
+                                    String newPath = locUri.getRawPath();
+                                    String newQuery = locUri.getRawQuery();
+                                    return proxyBase + newPath + (newQuery != null ? "?" + newQuery : "");
+                                } catch (Exception e) {
+                                    log.warn("Location 헤더 rewrite 실패: {}", loc, e);
+                                    return loc;
+                                }
+                            })
+                            .toList();
+                    responseHeaders.put(key, rewritten);
+                } else {
+                    responseHeaders.put(key, value); // ✅ Docker-Content-Digest, Content-Length 등 유지
                 }
             });
 
