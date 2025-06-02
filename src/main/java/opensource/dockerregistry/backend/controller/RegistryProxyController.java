@@ -2,8 +2,6 @@ package opensource.dockerregistry.backend.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
@@ -12,7 +10,13 @@ import lombok.extern.slf4j.Slf4j;
 import opensource.dockerregistry.backend.dto.AuditLogRequestDto;
 import opensource.dockerregistry.backend.service.AuditLogService;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -53,9 +57,8 @@ public class RegistryProxyController {
             HttpEntity<byte[]> httpEntity = new HttpEntity<>(body, headers);
             ResponseEntity<byte[]> response = restTemplate.exchange(uri, method, httpEntity, byte[].class);
 
-            String authHeader = request.getHeader("Authorization");
-            String username = extractUsernameFromHeader(authHeader);
             String targetImage = extractImageFromPath(path);
+            String username = getAuthenticatedUsername();
 
             if (response.getStatusCode().is2xxSuccessful()) {
                 if (method == HttpMethod.PUT && path.contains("/manifests/")) {
@@ -71,17 +74,8 @@ public class RegistryProxyController {
                     if (key.equalsIgnoreCase("Location")) {
                         String proxyBase = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
                         List<String> rewritten = value.stream()
-                                .map(loc -> {
-                                    try {
-                                        URI locUri = URI.create(loc);
-                                        String newPath = locUri.getRawPath();
-                                        String newQuery = locUri.getRawQuery();
-                                        return proxyBase + newPath + (newQuery != null ? "?" + newQuery : "");
-                                    } catch (Exception e) {
-                                        log.warn("Location 헤더 파싱 실패", e);
-                                        return loc;
-                                    }
-                                })
+                                .map(loc -> loc.replace(registryUrl + "/", proxyBase + "/"))
+                                .map(loc -> loc.replaceAll("(?<!(http:|https:))/+", "/"))
                                 .toList();
                         responseHeaders.put(key, rewritten);
                     } else {
@@ -101,24 +95,17 @@ public class RegistryProxyController {
         }
     }
 
-    private String extractUsernameFromHeader(String authHeader) {
-        if (authHeader != null && authHeader.startsWith("Basic ")) {
-            try {
-                String base64Credentials = authHeader.substring("Basic ".length());
-                byte[] decodedBytes = Base64.getDecoder().decode(base64Credentials);
-                String decoded = new String(decodedBytes, StandardCharsets.UTF_8);
-                return decoded.split(":", 2)[0];
-            } catch (Exception e) {
-                log.warn("Authorization 디코딩 실패", e);
-                return "unknown";
-            }
-        }
-        return "anonymous";
-    }
-
     private String extractImageFromPath(String path) {
         String trimmed = path.startsWith("/") ? path.substring(1) : path;
         String[] segments = trimmed.split("/");
         return segments.length >= 2 ? segments[0] : "unknown";
+    }
+
+    private String getAuthenticatedUsername() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())) {
+            return auth.getName();
+        }
+        return "anonymous";
     }
 }
